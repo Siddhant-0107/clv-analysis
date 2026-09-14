@@ -3,7 +3,12 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.clv import add_clv_cac, add_clv_metrics, revenue_concentration
+from src.clv import (
+    add_clv_cac,
+    add_clv_metrics,
+    channel_clv_cac,
+    revenue_concentration,
+)
 from src.customer_metrics import build_customer_metrics
 from src.segmentation import add_clv_segments
 
@@ -62,7 +67,7 @@ def test_revenue_concentration() -> None:
     assert share == pytest.approx(400 / 700)
 
 
-def test_clv_cac_ratio() -> None:
+def test_customer_clv_cac_proxy() -> None:
     metrics = add_clv_metrics(build_customer_metrics(sample_transactions()))
     cac = pd.DataFrame(
         {
@@ -72,4 +77,21 @@ def test_clv_cac_ratio() -> None:
     )
     enriched = add_clv_cac(metrics, cac)
     c1 = enriched.loc[enriched["customer_id"] == "C1"].iloc[0]
-    assert c1["clv_cac_ratio"] == 3.0
+    assert c1["customer_clv_cac_proxy"] == pytest.approx(3.0)
+
+
+def test_channel_clv_cac_uses_average_clv() -> None:
+    metrics = add_clv_metrics(build_customer_metrics(sample_transactions()))
+    cac = pd.DataFrame(
+        {
+            "acquisition_channel": ["Organic", "Referral"],
+            "cac": [100.0, 200.0],
+        }
+    )
+    enriched = add_clv_cac(metrics, cac)
+    summary = channel_clv_cac(enriched)
+    organic = summary.loc[summary["acquisition_channel"] == "Organic"].iloc[0]
+
+    # Organic has one customer in this fixture, so average CLV is 300.
+    assert organic["avg_clv"] == pytest.approx(300.0)
+    assert organic["clv_cac"] == pytest.approx(3.0)
