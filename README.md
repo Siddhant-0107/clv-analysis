@@ -1,78 +1,297 @@
-# Customer Lifetime Value Analysis
+# Customer Lifetime Value (CLV) Analysis
 
-A product analytics project that measures observed customer value, segments customers by lifetime value, compares acquisition channels, and evaluates simple customer economics through CLV:CAC.
+> **Product Analytics Portfolio Project** — turning transaction history into customer-value segments, acquisition-quality insights, and actionable retention decisions.
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit-red)](https://streamlit.io/)
+[![Tests](https://img.shields.io/badge/Tests-8%20passing-brightgreen)](https://pytest.org/)
+
+## Executive Summary
+
+Acquiring customers is only valuable when those customers generate sustainable economic value. This project analyzes customer transaction history to understand **who creates value, how value is distributed, and which acquisition channels appear most efficient**.
+
+The analysis is deliberately centered on **historical / observed CLV** rather than a predictive LTV model. That keeps the conclusions grounded in realized transaction behavior while making the assumptions transparent.
+
+The dashboard answers five business questions:
+
+1. **How much observed revenue does each customer generate?**
+2. **How concentrated is revenue across customers?**
+3. **Which CLV segments drive the business?**
+4. **Which acquisition channels bring higher-value customers?**
+5. **Which channels have the strongest observed CLV:CAC efficiency?**
+
+---
+
+## Key Analytical Takeaways
+
+The dashboard is designed to surface findings such as:
+
+- A small high-value customer segment can contribute a disproportionate share of observed revenue.
+- The acquisition channel with the highest customer volume is not necessarily the channel with the highest customer value.
+- High CLV and strong acquisition efficiency are different questions: a channel can produce valuable customers but still have weak economics if CAC is high.
+- Retention strategy should prioritize protecting the customer groups that contribute the largest share of realized revenue.
+
+The exact values are generated from the deterministic synthetic dataset and may change if the generation assumptions are changed.
+
+---
 
 ## Business Problem
 
-Customer acquisition volume does not necessarily translate into customer value. This project uses transaction history to answer:
+A product or growth team needs to decide where to focus **retention, loyalty, and acquisition investment**. Looking only at customer count or total revenue can hide important differences in customer economics.
 
-- How much revenue does each customer generate?
-- How frequently do customers purchase?
-- Which customer groups contribute the most revenue?
-- Which acquisition channels generate higher-value customers?
-- Which channels show the strongest observed CLV:CAC?
+This project therefore combines:
+
+**Customer behavior → Customer value → Segmentation → Acquisition economics → Business action**
+
+---
+
+## Data
+
+The project generates a deterministic synthetic dataset for portfolio and interview use.
+
+### Customers
+
+Each customer has:
+
+- `customer_id`
+- `acquisition_channel`
+
+### Transactions
+
+Each transaction contains:
+
+- `transaction_id`
+- `customer_id`
+- `transaction_date`
+- `amount`
+- `acquisition_channel`
+- `product_category`
+- `order_status`
+
+### Channel CAC
+
+A separate synthetic table provides channel-level customer acquisition cost:
+
+- Organic
+- Paid Search
+- Social Media
+- Email
+- Referral
+- Affiliate
+
+**Important:** CAC is synthetic and is included to demonstrate unit-economics analysis. It is not actual marketing-spend or attribution data.
+
+---
 
 ## Methodology
 
 ### 1. Data cleaning
-Only completed transactions with valid customer IDs, dates, positive transaction amounts, and recognized acquisition channels are used in revenue analysis.
 
-### 2. Customer metrics
-For each customer we calculate:
+Only transactions that meet the following conditions are used for customer-value analysis:
 
-- Total revenue
-- Purchase frequency
-- Average order value (AOV)
-- First and last purchase date
-- Observed lifespan in days
-- Active months
-- Purchases per active month
-- Revenue per active month
+- completed order status
+- valid customer ID
+- valid transaction date
+- positive transaction amount
+- recognized acquisition channel
+
+A small amount of synthetic data-quality noise is intentionally generated so the cleaning layer can be tested.
+
+### 2. Customer-level metrics
+
+For every customer, the pipeline calculates:
+
+| Metric | Definition |
+|---|---|
+| Total revenue | Sum of completed transaction value |
+| Purchase frequency | Number of completed purchases |
+| AOV | Total revenue ÷ purchase frequency |
+| First purchase | Earliest completed transaction |
+| Last purchase | Latest completed transaction |
+| Lifespan | Days between first and last purchase |
+| Active months | Number of calendar months with a purchase |
+| Purchases / active month | Purchase frequency ÷ active months |
+| Revenue / active month | Total revenue ÷ active months |
+
+For rate calculations, single-purchase customers use a minimum one-day observed lifespan to avoid division by zero.
 
 ### 3. Historical CLV
-The primary metric is **historical CLV**:
 
-`Historical CLV = cumulative completed customer revenue during the observation window`
+The primary CLV metric is:
 
-This is a measure of realized value, not a prediction of future revenue.
+```text
+Historical CLV = cumulative completed customer revenue
+                 during the observation window
+```
 
-### 4. CLV segmentation
-Customers are ranked by observed CLV and grouped into approximately:
+This is **realized customer value**, not a forecast of future purchases.
 
-- Low Value: bottom 20%
-- Medium: middle 60%
-- High Value: top 20%
+That distinction is intentional: the project demonstrates product-analysis reasoning without presenting a simple historical calculation as a predictive LTV model.
 
-### 5. Acquisition channel analysis
-We compare customer volume, average/median CLV, AOV, purchase frequency, and observed CLV:CAC across acquisition channels.
+### 4. Revenue concentration
 
-### 6. CLV:CAC
-Channel-level CAC is intentionally synthetic for portfolio demonstration. Observed CLV:CAC is calculated as:
+Customers are ranked by historical CLV. The dashboard measures how much total observed revenue is generated by the highest-value customer groups, including the **top 10% revenue share**.
 
-`Average observed CLV / CAC`
+This helps answer whether revenue is broadly distributed or concentrated among a relatively small customer base.
 
-It should not be interpreted as a live marketing attribution measurement.
+### 5. CLV segmentation
+
+Customers are ranked by historical CLV and divided approximately into:
+
+- **Low Value:** bottom 20%
+- **Medium:** middle 60%
+- **High Value:** top 20%
+
+The dashboard compares customer count, revenue contribution, CLV, AOV, and purchase behavior across these segments.
+
+### 6. Acquisition channel quality
+
+Channels are compared using:
+
+- customer count
+- average historical CLV
+- median historical CLV
+- average AOV
+- average purchase frequency
+- CAC
+- observed CLV:CAC
+
+This separates **customer value** from **acquisition efficiency**.
+
+### 7. Observed CLV:CAC
+
+The primary channel-level metric is:
+
+```text
+Observed CLV:CAC = Average historical CLV for channel / Channel CAC
+```
+
+For example, if a channel has an average historical CLV of ₹6,000 and CAC of ₹500:
+
+```text
+₹6,000 / ₹500 = 12x
+```
+
+This is a **retrospective unit-economics proxy**, not a predictive LTV:CAC model and not live marketing ROI.
+
+The customer explorer also contains a customer-level CLV/CAC diagnostic, but channel-level CLV:CAC is the primary business metric because the CAC assumptions are defined at channel level.
+
+---
 
 ## Dashboard
 
-The Streamlit dashboard includes:
+The Streamlit dashboard is organized as a decision flow:
 
-- KPI cards for customers, revenue, mean/median CLV, and top-10% revenue share
-- CLV distribution
-- CLV segment analysis
-- Acquisition-channel comparison
-- CLV:CAC analysis
-- Customer explorer with filters
-- Automated business interpretation
+### 1. Customer Value Distribution
 
-## Limitations
+Shows the shape and skew of historical customer value.
 
-- Historical CLV is realized value and does not forecast future customer behavior.
-- Customer lifespan is based on observed transaction dates and may understate the true customer relationship.
-- Synthetic CAC assumptions are used for unit-economics demonstration.
-- No predictive churn, survival, BG/NBD, Gamma-Gamma, or discounted-cash-flow model is included.
+### 2. CLV Segments
 
-## Project Structure
+Shows how customer count translates into revenue contribution across Low, Medium, and High Value customers.
+
+### 3. Acquisition Channel Quality
+
+Compares average historical CLV and observed CLV:CAC across acquisition channels.
+
+### 4. Customer Explorer
+
+Provides a ranked customer-level view with filters for:
+
+- CLV segment
+- acquisition channel
+
+### 5. Business Interpretation
+
+Automatically surfaces:
+
+- highest observed average CLV channel
+- strongest observed CLV:CAC channel
+- weakest observed CLV:CAC channel
+- high-value customer revenue concentration
+
+The goal is to move from **"what happened?"** to **"what should the business investigate or do next?"**
+
+---
+
+## Business Recommendations Framework
+
+The dashboard supports the following decision framework:
+
+### Retention
+
+If High Value customers contribute a large share of revenue, prioritize retention and loyalty initiatives around this group because losing a small number of high-value customers can have an outsized revenue impact.
+
+### Acquisition
+
+Do not allocate acquisition budget based on customer volume alone. Compare customer value with CAC before scaling a channel.
+
+### Channel optimization
+
+A channel with high CLV but poor CLV:CAC may need acquisition-cost optimization. A channel with strong CLV:CAC may be attractive for scaling, subject to volume, incrementality, and capacity constraints.
+
+### Next analytical step
+
+Before making real budget decisions, validate these findings with actual marketing spend, attribution, cohort retention, contribution margin, and future-value modeling.
+
+---
+
+## Limitations & Assumptions
+
+This is an intentionally scoped portfolio project.
+
+- **Historical CLV is not predictive CLV.** It measures realized revenue during the observation window.
+- **Customer lifespan is observed lifespan.** It may understate the true relationship when a customer has not purchased recently but has not actually churned.
+- **CAC is synthetic.** No real campaign spend or attribution data is used.
+- **Revenue is not profit.** CLV does not subtract product cost, fulfillment cost, discounts, refunds, or other contribution-margin components beyond the transaction cleaning rules.
+- **No predictive model is included.** The project does not implement BG/NBD, Gamma-Gamma, survival analysis, churn prediction, or discounted cash-flow forecasting.
+- **Segmentation is relative.** The 20/60/20 segmentation is rank-based and should not be interpreted as fixed business-value thresholds.
+- **Synthetic data is deterministic.** Results are intended to demonstrate analytical workflow rather than represent a real company's economics.
+
+---
+
+## Project Architecture
+
+```text
+Raw synthetic data
+       │
+       ▼
+generate_data.py
+       │
+       ▼
+data/
+       │
+       ▼
+src/cleaning.py
+       │
+       ▼
+src/customer_metrics.py
+       │
+       ├──────────────► customer behavior metrics
+       │
+       ▼
+src/clv.py
+       │
+       ├──────────────► historical CLV
+       ├──────────────► revenue concentration
+       └──────────────► channel CLV:CAC
+       │
+       ▼
+src/segmentation.py
+       │
+       ▼
+app.py
+       │
+       ▼
+Streamlit dashboard
+       │
+       ▼
+Business interpretation
+```
+
+---
+
+## Repository Structure
 
 ```text
 clv-analysis/
@@ -95,31 +314,123 @@ clv-analysis/
 └── .gitignore
 ```
 
+---
+
+## Tech Stack
+
+- **Python** — data generation and analytics pipeline
+- **Pandas / NumPy** — data manipulation and metric calculation
+- **Plotly** — interactive visualizations
+- **Streamlit** — dashboard
+- **Pytest** — analytical unit tests
+- **Git / GitHub** — version control and portfolio delivery
+
+---
+
 ## Run Locally
 
+### 1. Clone the repository
+
 ```bash
+git clone https://github.com/Siddhant-0107/clv-analysis.git
+cd clv-analysis
+```
+
+### 2. Create a virtual environment
+
+Windows PowerShell:
+
+```powershell
 py -3.10 -m venv .venv
 .venv\Scripts\activate
+```
+
+### 3. Install dependencies
+
+```powershell
 pip install -r requirements.txt
+```
+
+### 4. Generate the synthetic data
+
+```powershell
 python generate_data.py
+```
+
+### 5. Run tests
+
+```powershell
 python -m pytest -q
+```
+
+Expected result:
+
+```text
+8 passed
+```
+
+### 6. Launch the dashboard
+
+```powershell
 python -m streamlit run app.py
 ```
 
+---
+
+## Testing
+
+The test suite covers core analytical behavior including:
+
+- total revenue
+- purchase frequency
+- AOV
+- observed lifespan
+- historical CLV definition
+- CLV segmentation
+- revenue concentration
+- channel-level CLV:CAC methodology
+
+The tests intentionally validate **analytical definitions**, not just whether functions execute successfully.
+
+---
+
+## Interview Discussion Points
+
+This project is designed to support Product Analyst interview discussion around:
+
+1. Why use historical CLV instead of predictive CLV?
+2. Why is median CLV useful alongside average CLV?
+3. Why is customer value typically right-skewed?
+4. Why can high customer volume be a misleading acquisition metric?
+5. Why should CLV and CAC be evaluated together?
+6. Why is average channel CLV ÷ CAC more appropriate here than averaging customer-level ratios?
+7. Why is synthetic CAC a limitation?
+8. What additional data would be needed to make the CLV:CAC analysis production-ready?
+9. How would you identify churn or predict future customer value?
+10. How would you translate a high-value segment into a retention experiment?
+
+---
+
 ## Portfolio Positioning
 
-This project complements a product analytics portfolio by focusing on customer economics:
+This project is part of a broader Product Analytics portfolio and focuses on the **customer economics layer**:
 
-**Product Performance → Customer Behavior → Customer Economics**
+```text
+Product Performance
+        ↓
+Customer Behavior
+        ↓
+Customer Economics
+        ↓
+Business Decision
+```
 
-## Interview Topics
+The emphasis is not simply on building charts. The project demonstrates the full workflow from **data generation and cleaning → metric definitions → segmentation → unit economics → business interpretation → testing**.
 
-Be prepared to explain:
+---
 
-1. Why historical CLV was used instead of predictive CLV.
-2. Why median CLV is shown alongside average CLV.
-3. Why one-purchase customers need a minimum calculation lifespan for rate metrics.
-4. How CLV segments are constructed.
-5. Why high customer volume does not necessarily mean high acquisition quality.
-6. What CLV:CAC can and cannot tell us.
-7. How synthetic CAC differs from real marketing-spend data.
+## Author
+
+**Siddhant-0107**
+
+GitHub: https://github.com/Siddhant-0107
