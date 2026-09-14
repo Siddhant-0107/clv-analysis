@@ -14,13 +14,41 @@ CHANNELS = ["Organic", "Paid Search", "Social Media", "Email", "Referral", "Affi
 CHANNEL_PROBS = [0.24, 0.23, 0.18, 0.10, 0.11, 0.14]
 CATEGORIES = ["Electronics", "Fashion", "Home & Kitchen", "Beauty", "Sports"]
 CATEGORY_PROBS = [0.22, 0.27, 0.21, 0.15, 0.15]
+
+# Synthetic acquisition economics used only to demonstrate channel-level CLV:CAC.
 CAC_BY_CHANNEL = {
-    "Organic": 80.0,
-    "Paid Search": 350.0,
-    "Social Media": 250.0,
-    "Email": 50.0,
-    "Referral": 120.0,
-    "Affiliate": 180.0,
+    "Organic": 450.0,
+    "Paid Search": 1_000.0,
+    "Social Media": 800.0,
+    "Email": 350.0,
+    "Referral": 500.0,
+    "Affiliate": 650.0,
+}
+
+# Moderate channel effects create meaningful but not artificial differences in value.
+CHANNEL_ORDER_MULTIPLIER = {
+    "Organic": 1.00,
+    "Paid Search": 0.94,
+    "Social Media": 0.86,
+    "Email": 1.08,
+    "Referral": 1.18,
+    "Affiliate": 0.97,
+}
+CHANNEL_SPEND_MULTIPLIER = {
+    "Organic": 1.00,
+    "Paid Search": 1.03,
+    "Social Media": 0.94,
+    "Email": 0.98,
+    "Referral": 1.12,
+    "Affiliate": 1.01,
+}
+CHANNEL_RETENTION = {
+    "Organic": 1.05,
+    "Paid Search": 0.88,
+    "Social Media": 0.82,
+    "Email": 1.10,
+    "Referral": 1.20,
+    "Affiliate": 0.94,
 }
 
 
@@ -37,7 +65,6 @@ def generate_transactions(seed: int = RANDOM_SEED) -> tuple[pd.DataFrame, pd.Dat
         }
     )
 
-    # Customer-level propensity creates realistic variation in frequency and spend.
     segment = rng.choice(
         ["low", "medium", "high"], size=N_CUSTOMERS, p=[0.30, 0.55, 0.15]
     )
@@ -50,16 +77,9 @@ def generate_transactions(seed: int = RANDOM_SEED) -> tuple[pd.DataFrame, pd.Dat
         [0.75, 1.0, 1.55],
     )
 
-    channel_retention = customers["acquisition_channel"].map(
-        {
-            "Organic": 1.10,
-            "Paid Search": 0.88,
-            "Social Media": 0.82,
-            "Email": 1.02,
-            "Referral": 1.28,
-            "Affiliate": 0.95,
-        }
-    ).to_numpy()
+    channel_order = customers["acquisition_channel"].map(CHANNEL_ORDER_MULTIPLIER).to_numpy()
+    channel_spend = customers["acquisition_channel"].map(CHANNEL_SPEND_MULTIPLIER).to_numpy()
+    channel_retention = customers["acquisition_channel"].map(CHANNEL_RETENTION).to_numpy()
 
     rows: list[dict[str, object]] = []
     transaction_counter = 1
@@ -70,17 +90,21 @@ def generate_transactions(seed: int = RANDOM_SEED) -> tuple[pd.DataFrame, pd.Dat
             days=int(rng.integers(0, (END_DATE - START_DATE).days - 30))
         )
 
-        # High-value / referral customers have a slightly longer active window.
         remaining_days = max((END_DATE - acquisition_date).days, 1)
         active_fraction = np.clip(
             rng.beta(2.2, 1.5) * channel_retention[idx], 0.18, 1.0
         )
         last_possible_date = min(
             END_DATE,
-            acquisition_date + pd.Timedelta(days=max(int(remaining_days * active_fraction), 1)),
+            acquisition_date
+            + pd.Timedelta(days=max(int(remaining_days * active_fraction), 1)),
         )
 
-        expected_orders = base_lambda[idx] * (0.65 + remaining_days / 365.0)
+        expected_orders = (
+            base_lambda[idx]
+            * channel_order[idx]
+            * (0.65 + remaining_days / 365.0)
+        )
         n_orders = max(1, int(rng.poisson(expected_orders)))
         dates = pd.to_datetime(
             rng.integers(
@@ -104,6 +128,7 @@ def generate_transactions(seed: int = RANDOM_SEED) -> tuple[pd.DataFrame, pd.Dat
             amount = (
                 rng.lognormal(mean=np.log(750), sigma=0.58)
                 * spend_multiplier[idx]
+                * channel_spend[idx]
                 * category_multiplier
             )
             status = "Cancelled" if rng.random() < 0.055 else "Completed"
@@ -123,7 +148,6 @@ def generate_transactions(seed: int = RANDOM_SEED) -> tuple[pd.DataFrame, pd.Dat
 
     transactions = pd.DataFrame(rows)
 
-    # Add a tiny amount of realistic data quality noise to validate cleaning logic.
     if len(transactions) >= 100:
         missing_idx = rng.choice(transactions.index, size=25, replace=False)
         transactions.loc[missing_idx, "product_category"] = None
