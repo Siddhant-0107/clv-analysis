@@ -57,9 +57,9 @@ median_clv = filtered["historical_clv"].median() if total_customers else 0
 top10_share = revenue_concentration(filtered) if total_customers else 0
 
 col1.metric("Customers", f"{total_customers:,}")
-col2.metric("Revenue", f"₹{total_revenue:,.0f}")
-col3.metric("Average CLV", f"₹{avg_clv:,.0f}")
-col4.metric("Median CLV", f"₹{median_clv:,.0f}")
+col2.metric("Observed Revenue", f"₹{total_revenue:,.0f}")
+col3.metric("Average Historical CLV", f"₹{avg_clv:,.0f}")
+col4.metric("Median Historical CLV", f"₹{median_clv:,.0f}")
 col5.metric("Top 10% Revenue Share", f"{top10_share:.1%}")
 
 st.divider()
@@ -74,7 +74,7 @@ fig_dist = px.histogram(
 )
 fig_dist.update_layout(bargap=0.04)
 st.plotly_chart(fig_dist, use_container_width=True)
-st.caption("The long right tail indicates that a relatively small group of customers contributes substantially more observed revenue than the typical customer.")
+st.caption("The long right tail indicates that customer value is highly skewed: a relatively small group of customers contributes substantially more observed revenue than the typical customer.")
 
 st.subheader("2. CLV Segments")
 seg_summary = segment_summary(filtered)
@@ -114,7 +114,7 @@ with channel_col1:
         x="acquisition_channel",
         y="avg_clv",
         title="Average Historical CLV by Channel",
-        labels={"avg_clv": "Average CLV (₹)", "acquisition_channel": "Channel"},
+        labels={"avg_clv": "Average Historical CLV (₹)", "acquisition_channel": "Channel"},
     )
     st.plotly_chart(fig_channel, use_container_width=True)
 with channel_col2:
@@ -122,7 +122,7 @@ with channel_col2:
         channel_summary.sort_values("clv_cac", ascending=False),
         x="acquisition_channel",
         y="clv_cac",
-        title="Observed CLV:CAC by Channel",
+        title="Observed CLV:CAC Proxy by Acquisition Channel",
         labels={"clv_cac": "Average CLV / CAC", "acquisition_channel": "Channel"},
     )
     st.plotly_chart(fig_ratio, use_container_width=True)
@@ -141,7 +141,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
 )
-st.caption("Observed CLV:CAC = channel average historical CLV ÷ synthetic channel CAC. It is an observed unit-economics proxy, not a predictive CLV model or live marketing-spend measurement.")
+st.info("**Methodology:** Observed CLV:CAC = channel average historical CLV ÷ synthetic channel CAC. This is a retrospective unit-economics proxy, not a predictive CLV model or live marketing ROI measurement.")
 
 st.subheader("4. Customer Explorer")
 view_columns = [
@@ -174,11 +174,8 @@ highest_channel = channel_summary.sort_values("avg_clv", ascending=False).iloc[0
 best_ratio_channel = channel_summary.sort_values("clv_cac", ascending=False).iloc[0] if not channel_summary.empty else None
 weakest_ratio_channel = channel_summary.sort_values("clv_cac", ascending=True).iloc[0] if not channel_summary.empty else None
 
-high_value_share = (
-    filtered.loc[filtered["clv_segment"] == "High Value", "historical_clv"].sum() / total_revenue
-    if total_revenue > 0
-    else 0
-)
+high_value_revenue = filtered.loc[filtered["clv_segment"] == "High Value", "historical_clv"].sum()
+high_value_share = high_value_revenue / total_revenue if total_revenue > 0 else 0
 
 if highest_channel is not None:
     st.info(
@@ -190,9 +187,9 @@ if best_ratio_channel is not None:
     )
 if weakest_ratio_channel is not None:
     st.warning(
-        f"**Optimization opportunity:** {weakest_ratio_channel['acquisition_channel']} has the weakest observed CLV:CAC at approximately **{weakest_ratio_channel['clv_cac']:.1f}x**; acquisition spend should be evaluated before scaling this channel."
+        f"**Optimization opportunity:** {weakest_ratio_channel['acquisition_channel']} has the weakest observed CLV:CAC at approximately **{weakest_ratio_channel['clv_cac']:.1f}x**. Before scaling this channel, validate conversion quality and acquisition economics with real spend data."
     )
 st.success(
-    f"**Retention priority:** High Value customers account for approximately **{high_value_share:.1%}** of observed revenue in the current view. Retention and loyalty efforts should prioritize this segment."
+    f"**Retention priority:** High Value customers account for approximately **{high_value_share:.1%}** of observed revenue in the current view. Retention and loyalty efforts should prioritize protecting this revenue base."
 )
 st.caption("Interpretation is based on observed transaction history. Historical CLV measures realized revenue during the observation window; it does not predict future customer purchases.")
