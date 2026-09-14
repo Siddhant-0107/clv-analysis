@@ -4,14 +4,13 @@ import pandas as pd
 
 
 def add_clv_metrics(customer_metrics: pd.DataFrame) -> pd.DataFrame:
-    """Add historical CLV and revenue-concentration metrics.
+    """Add historical CLV metrics.
 
     Historical CLV is realized completed revenue during the observation window.
     The annualized value is a run-rate proxy, not a predictive forecast.
     """
     df = customer_metrics.copy()
     df["historical_clv"] = df["total_revenue"]
-
     return df
 
 
@@ -31,18 +30,47 @@ def revenue_concentration(customer_metrics: pd.DataFrame, top_fraction: float = 
 
 
 def add_clv_cac(customer_metrics: pd.DataFrame, cac: pd.DataFrame) -> pd.DataFrame:
-    """Attach channel CAC and calculate observed CLV:CAC."""
+    """Attach channel CAC to customer data.
+
+    The customer table keeps CAC for exploration, but the primary CLV:CAC
+    calculation is performed at channel level using average customer CLV / CAC.
+    """
     required = {"acquisition_channel", "cac"}
     missing = required - set(cac.columns)
     if missing:
         raise ValueError(f"Missing CAC columns: {sorted(missing)}")
 
-    df = customer_metrics.merge(cac[list(required)], on="acquisition_channel", how="left")
+    df = customer_metrics.merge(
+        cac[list(required)], on="acquisition_channel", how="left", validate="many_to_one"
+    )
     if df["cac"].isna().any():
         missing_channels = sorted(df.loc[df["cac"].isna(), "acquisition_channel"].unique())
         raise ValueError(f"Missing CAC assumptions for: {missing_channels}")
     if (df["cac"] <= 0).any():
         raise ValueError("CAC values must be positive")
 
-    df["clv_cac_ratio"] = df["historical_clv"] / df["cac"]
+    # This is the customer-level diagnostic only; the dashboard uses channel CLV:CAC.
+    df["customer_clv_cac_proxy"] = df["historical_clv"] / df["cac"]
     return df
+
+
+def channel_clv_cac(customer_metrics: pd.DataFrame) -> pd.DataFrame:
+    """Calculate observed channel-level CLV:CAC using average CLV / CAC."""
+    required = {"acquisition_channel", "historical_clv", "cac"}
+    missing = required - set(customer_metrics.columns)
+    if missing:
+        raise ValueError(f"Missing customer metric columns: {sorted(missing)}")
+
+    summary = (
+        customer_metrics.groupby("acquisition_channel", as_index=False)
+        .agg(
+            customers=("customer_id", "nunique"),
+            avg_clv=("historical_clv", "mean"),
+            median_clv=("historical_clv", "median"),
+            avg_aov=("aov", "mean"),
+            avg_frequency=("purchase_frequency", "mean"),
+            cac=("cac", "first"),
+        )
+    )
+    summary["clv_cac"] = summary["avg_clv"] / summary["cac"]
+    return summary
