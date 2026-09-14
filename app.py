@@ -8,7 +8,7 @@ import streamlit as st
 
 from src.cleaning import clean_transactions
 from src.customer_metrics import build_customer_metrics
-from src.clv import add_clv_cac, add_clv_metrics, revenue_concentration
+from src.clv import add_clv_cac, add_clv_metrics, channel_clv_cac, revenue_concentration
 from src.segmentation import add_clv_segments, segment_summary
 
 st.set_page_config(page_title="Customer Lifetime Value Analysis", page_icon="📈", layout="wide")
@@ -37,7 +37,6 @@ if not DATA_PATH.exists() or not CAC_PATH.exists():
 
 transactions, customers = load_analysis()
 
-# Sidebar controls
 st.sidebar.header("Filters")
 segments = ["All"] + sorted(customers["clv_segment"].unique().tolist())
 channels = ["All"] + sorted(customers["acquisition_channel"].unique().tolist())
@@ -50,7 +49,6 @@ if selected_segment != "All":
 if selected_channel != "All":
     filtered = filtered[filtered["acquisition_channel"] == selected_channel]
 
-# KPI cards
 col1, col2, col3, col4, col5 = st.columns(5)
 total_customers = len(filtered)
 total_revenue = filtered["historical_clv"].sum()
@@ -66,7 +64,6 @@ col5.metric("Top 10% Revenue Share", f"{top10_share:.1%}")
 
 st.divider()
 
-# CLV distribution
 st.subheader("1. Customer Value Distribution")
 fig_dist = px.histogram(
     filtered,
@@ -77,8 +74,8 @@ fig_dist = px.histogram(
 )
 fig_dist.update_layout(bargap=0.04)
 st.plotly_chart(fig_dist, use_container_width=True)
+st.caption("The long right tail indicates that a relatively small group of customers contributes substantially more observed revenue than the typical customer.")
 
-# Segment analysis
 st.subheader("2. CLV Segments")
 seg_summary = segment_summary(filtered)
 chart_col1, chart_col2 = st.columns(2)
@@ -94,22 +91,22 @@ with chart_col2:
         labels={"total_revenue": "Revenue (₹)"},
     )
     st.plotly_chart(fig_rev, use_container_width=True)
-st.dataframe(seg_summary.style.format({"total_revenue": "₹{:,.0f}", "avg_clv": "₹{:,.0f}", "median_clv": "₹{:,.0f}", "avg_aov": "₹{:,.0f}", "revenue_share": "{:.1%}"}), use_container_width=True, hide_index=True)
-
-# Acquisition analysis
-st.subheader("3. Acquisition Channel Quality")
-channel_summary = (
-    filtered.groupby("acquisition_channel", as_index=False)
-    .agg(
-        customers=("customer_id", "nunique"),
-        avg_clv=("historical_clv", "mean"),
-        median_clv=("historical_clv", "median"),
-        avg_aov=("aov", "mean"),
-        avg_frequency=("purchase_frequency", "mean"),
-        cac=("cac", "first"),
-        clv_cac=("clv_cac_ratio", "mean"),
-    )
+st.dataframe(
+    seg_summary.style.format(
+        {
+            "total_revenue": "₹{:,.0f}",
+            "avg_clv": "₹{:,.0f}",
+            "median_clv": "₹{:,.0f}",
+            "avg_aov": "₹{:,.0f}",
+            "revenue_share": "{:.1%}",
+        }
+    ),
+    use_container_width=True,
+    hide_index=True,
 )
+
+st.subheader("3. Acquisition Channel Quality")
+channel_summary = channel_clv_cac(filtered)
 channel_col1, channel_col2 = st.columns(2)
 with channel_col1:
     fig_channel = px.bar(
@@ -126,7 +123,7 @@ with channel_col2:
         x="acquisition_channel",
         y="clv_cac",
         title="Observed CLV:CAC by Channel",
-        labels={"clv_cac": "CLV:CAC Ratio", "acquisition_channel": "Channel"},
+        labels={"clv_cac": "Average CLV / CAC", "acquisition_channel": "Channel"},
     )
     st.plotly_chart(fig_ratio, use_container_width=True)
 
@@ -144,8 +141,8 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
 )
+st.caption("Observed CLV:CAC = channel average historical CLV ÷ synthetic channel CAC. It is an observed unit-economics proxy, not a predictive CLV model or live marketing-spend measurement.")
 
-# Customer explorer
 st.subheader("4. Customer Explorer")
 view_columns = [
     "customer_id",
@@ -156,7 +153,7 @@ view_columns = [
     "aov",
     "lifespan_days",
     "revenue_per_active_month",
-    "clv_cac_ratio",
+    "customer_clv_cac_proxy",
 ]
 explorer = filtered[view_columns].sort_values("historical_clv", ascending=False).head(100)
 st.dataframe(
@@ -165,7 +162,7 @@ st.dataframe(
             "historical_clv": "₹{:,.0f}",
             "aov": "₹{:,.0f}",
             "revenue_per_active_month": "₹{:,.0f}",
-            "clv_cac_ratio": "{:.1f}x",
+            "customer_clv_cac_proxy": "{:.1f}x",
         }
     ),
     use_container_width=True,
@@ -175,15 +172,27 @@ st.dataframe(
 st.subheader("5. Business Interpretation")
 highest_channel = channel_summary.sort_values("avg_clv", ascending=False).iloc[0] if not channel_summary.empty else None
 best_ratio_channel = channel_summary.sort_values("clv_cac", ascending=False).iloc[0] if not channel_summary.empty else None
+weakest_ratio_channel = channel_summary.sort_values("clv_cac", ascending=True).iloc[0] if not channel_summary.empty else None
+
+high_value_share = (
+    filtered.loc[filtered["clv_segment"] == "High Value", "historical_clv"].sum() / total_revenue
+    if total_revenue > 0
+    else 0
+)
 
 if highest_channel is not None:
     st.info(
-        f"Highest observed average CLV channel: **{highest_channel['acquisition_channel']}** "
-        f"at approximately **₹{highest_channel['avg_clv']:,.0f}** per customer."
+        f"**Acquisition quality:** {highest_channel['acquisition_channel']} has the highest observed average CLV at approximately **₹{highest_channel['avg_clv']:,.0f}** per customer."
     )
 if best_ratio_channel is not None:
     st.info(
-        f"Strongest observed CLV:CAC channel: **{best_ratio_channel['acquisition_channel']}** "
-        f"at approximately **{best_ratio_channel['clv_cac']:.1f}x**."
+        f"**Unit economics:** {best_ratio_channel['acquisition_channel']} has the strongest observed CLV:CAC at approximately **{best_ratio_channel['clv_cac']:.1f}x**, based on synthetic CAC assumptions."
     )
-st.caption("CLV:CAC uses synthetic channel-level CAC assumptions included in this portfolio project; it is not a live marketing-spend measurement.")
+if weakest_ratio_channel is not None:
+    st.warning(
+        f"**Optimization opportunity:** {weakest_ratio_channel['acquisition_channel']} has the weakest observed CLV:CAC at approximately **{weakest_ratio_channel['clv_cac']:.1f}x**; acquisition spend should be evaluated before scaling this channel."
+    )
+st.success(
+    f"**Retention priority:** High Value customers account for approximately **{high_value_share:.1%}** of observed revenue in the current view. Retention and loyalty efforts should prioritize this segment."
+)
+st.caption("Interpretation is based on observed transaction history. Historical CLV measures realized revenue during the observation window; it does not predict future customer purchases.")
