@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from generate_data import generate_transactions
 from src.cleaning import clean_transactions
 from src.customer_metrics import build_customer_metrics
 from src.clv import add_clv_cac, add_clv_metrics, channel_clv_cac, revenue_concentration
@@ -30,10 +31,13 @@ def load_analysis() -> tuple[pd.DataFrame, pd.DataFrame]:
 st.title("Customer Lifetime Value Analysis")
 st.caption("Observed customer economics, revenue concentration, acquisition quality, and CLV:CAC")
 
+# The source data is generated rather than stored in GitHub. This keeps the
+# repository lightweight while allowing Streamlit Community Cloud to run the
+# dashboard immediately after deployment.
 if not DATA_PATH.exists() or not CAC_PATH.exists():
-    st.warning("Data files are not present yet.")
-    st.code("python generate_data.py\npython -m streamlit run app.py")
-    st.stop()
+    with st.spinner("Generating synthetic customer data for the dashboard..."):
+        generate_transactions()
+    st.success("Synthetic data generated successfully. Loading the analysis...")
 
 transactions, customers = load_analysis()
 
