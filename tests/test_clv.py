@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from src.clv import add_clv_cac, add_clv_metrics, revenue_concentration
 from src.customer_metrics import build_customer_metrics
@@ -55,7 +56,10 @@ def test_clv_segments_cover_customers() -> None:
 def test_revenue_concentration() -> None:
     metrics = add_clv_metrics(build_customer_metrics(sample_transactions()))
     share = revenue_concentration(metrics, top_fraction=0.5)
-    assert share == 0.5
+
+    # C2 generates 400 of the total 700 revenue, so the top 50% of
+    # customers (one of two customers) contribute 400 / 700 of revenue.
+    assert share == pytest.approx(400 / 700)
 
 
 def test_clv_cac_ratio() -> None:
